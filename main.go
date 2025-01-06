@@ -90,7 +90,7 @@ func fetchGoogIPRanges(url string) (*GoogIPRanges, error) {
 	if err != nil {
 		return nil, fmt.Errorf("не удалось открыть URL %s: %w", url, err)
 	}
-	// Корректная обработка ошибки при закрытии тела ответа
+
 	defer func() {
 		if cerr := resp.Body.Close(); cerr != nil {
 			log.Printf("Не удалось корректно закрыть resp.Body: %v", cerr)
