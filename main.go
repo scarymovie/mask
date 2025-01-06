@@ -76,9 +76,7 @@ func main() {
 			continue
 		}
 
-		// Выводим в консоль
 		fmt.Println(routeCmd)
-		// Пишем в файл
 		if _, err := outFile.WriteString(routeCmd + "\n"); err != nil {
 			log.Printf("Не удалось записать строку в файл: %v", err)
 		}
