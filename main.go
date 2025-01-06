@@ -20,41 +20,67 @@ type PrefixRecord struct {
 	IPv6Prefix string `json:"ipv6Prefix,omitempty"`
 }
 
+func readExtras(filename string) ([]string, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("не удалось открыть файл %s: %w", filename, err)
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			log.Printf("Не удалось корректно закрыть файл %s: %v", filename, cerr)
+		}
+	}()
+
+	var extras []string
+	if err := json.NewDecoder(f).Decode(&extras); err != nil {
+		return nil, fmt.Errorf("не удалось декодировать extras.json: %w", err)
+	}
+	return extras, nil
+}
+
 func main() {
 	url := "https://www.gstatic.com/ipranges/goog.json"
-
 	data, err := fetchGoogIPRanges(url)
 	if err != nil {
 		log.Fatalf("ошибка при загрузке данных: %v", err)
 	}
 
-	file, err := os.Create("routes.txt")
+	extras, err := readExtras("extras.json")
 	if err != nil {
-		log.Fatalf("не удалось создать файл: %v", err)
+		log.Printf("Внимание: не удалось прочитать extras.json: %v", err)
+		extras = []string{}
 	}
 
+	combinedPrefixes := make([]string, 0, len(data.Prefixes)+len(extras))
+	for _, pr := range data.Prefixes {
+		if pr.IPv4Prefix != "" {
+			combinedPrefixes = append(combinedPrefixes, pr.IPv4Prefix)
+		}
+	}
+	combinedPrefixes = append(combinedPrefixes, extras...)
+
+	outFile, err := os.Create("routes.txt")
+	if err != nil {
+		log.Fatalf("не удалось создать файл routes.txt: %v", err)
+	}
 	defer func() {
-		if cerr := file.Close(); cerr != nil {
-			log.Printf("Не удалось корректно закрыть файл: %v", cerr)
+		if cerr := outFile.Close(); cerr != nil {
+			log.Printf("Не удалось корректно закрыть файл routes.txt: %v", cerr)
 		}
 	}()
 
-	for _, pr := range data.Prefixes {
-		if pr.IPv4Prefix == "" {
-			continue
-		}
-
-		routeCmd, err := buildRouteCommand(pr.IPv4Prefix)
+	for _, cidr := range combinedPrefixes {
+		routeCmd, err := buildRouteCommand(cidr)
 		if err != nil {
-			log.Printf("Не удалось обработать %s: %v", pr.IPv4Prefix, err)
+			log.Printf("Не удалось обработать %s: %v", cidr, err)
 			continue
 		}
 
+		// Выводим в консоль
 		fmt.Println(routeCmd)
-
-		_, writeErr := file.WriteString(routeCmd + "\n")
-		if writeErr != nil {
-			log.Printf("не удалось записать строку: %v", writeErr)
+		// Пишем в файл
+		if _, err := outFile.WriteString(routeCmd + "\n"); err != nil {
+			log.Printf("Не удалось записать строку в файл: %v", err)
 		}
 	}
 }
@@ -64,7 +90,7 @@ func fetchGoogIPRanges(url string) (*GoogIPRanges, error) {
 	if err != nil {
 		return nil, fmt.Errorf("не удалось открыть URL %s: %w", url, err)
 	}
-
+	// Корректная обработка ошибки при закрытии тела ответа
 	defer func() {
 		if cerr := resp.Body.Close(); cerr != nil {
 			log.Printf("Не удалось корректно закрыть resp.Body: %v", cerr)
@@ -89,7 +115,6 @@ func buildRouteCommand(cidr string) (string, error) {
 	}
 
 	network := ipNet.IP
-
 	netmask := ipMaskToString(ipNet.Mask)
 
 	return fmt.Sprintf("route ADD %s MASK %s 0.0.0.0",
@@ -99,6 +124,5 @@ func buildRouteCommand(cidr string) (string, error) {
 }
 
 func ipMaskToString(mask net.IPMask) string {
-	ip := net.IP(mask).String()
-	return ip
+	return net.IP(mask).String()
 }
