@@ -32,7 +32,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("не удалось создать файл: %v", err)
 	}
-	defer file.Close()
+
+	defer func() {
+		if cerr := file.Close(); cerr != nil {
+			log.Printf("Не удалось корректно закрыть файл: %v", cerr)
+		}
+	}()
 
 	for _, pr := range data.Prefixes {
 		if pr.IPv4Prefix == "" {
@@ -59,7 +64,12 @@ func fetchGoogIPRanges(url string) (*GoogIPRanges, error) {
 	if err != nil {
 		return nil, fmt.Errorf("не удалось открыть URL %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			log.Printf("Не удалось корректно закрыть resp.Body: %v", cerr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("получен некорректный HTTP-статус %d", resp.StatusCode)
